@@ -22,7 +22,7 @@ int main(int argc, char **argv)
     matrix *m = matrix_load_part(matrixname, myrank, size);
     vector *v = vector_load(vectorname);
     vector *result = multiply(m, v);
-
+    
     vector *final_result = 0;
     int *recvcounts = 0;
     int *displs = 0;
@@ -40,7 +40,8 @@ int main(int argc, char **argv)
         recvcounts[size - 1] = v->size - displ;
         displs[size - 1] = displ;
     }
-    MPI_Gatherv(result->values, result->size, MPI_LONG_LONG, final_result->values, recvcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    
+    MPI_Gatherv(result->values, result->size, MPI_DOUBLE, (final_result != 0) ? final_result->values : 0, recvcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     
     if (!myrank) {
         vector_save(final_result, resultname);

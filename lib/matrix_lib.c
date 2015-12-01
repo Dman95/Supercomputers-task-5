@@ -252,7 +252,7 @@ double dot(vector *v1, vector *v2)
 
 vector *multiply(matrix *m, vector *v)
 {
-    vector *result = vector_new(v->size);
+    vector *result = vector_new(m->row_count);
     for (long long i = 0; i < m->row_count; ++i) {
         result->values[i] = dot(m->rows[i], v);
     }
