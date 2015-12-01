@@ -72,6 +72,20 @@ void vector_save_fp(vector *v, MPI_File *f)
     MPI_File_write(*f, v->values, v->size, MPI_DOUBLE, &s);
 }
 
+void vector_print(vector *v)
+{
+    printf("Vector 1 x %lld\n", v->size);
+    printf("[ ");
+    for (long long j = 0; j < v->size; ++j) {
+        printf("%f ", v->values[j]);
+        if (j > 10) {
+            printf("... ");
+            break;
+        }
+    }
+    printf("]\n");
+}
+
 void vector_delete(vector *v)
 {
     free(v->values);

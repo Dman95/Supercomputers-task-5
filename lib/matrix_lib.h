@@ -1,6 +1,8 @@
 #ifndef MATRIX_LIB_H
 #define MATRIX_LIB_H
 
+#include "mpi.h"
+
 //vector operations
 typedef struct vector
 {
@@ -14,6 +16,7 @@ vector *vector_load(char *filename);
 vector *vector_load_fp(MPI_File *f);
 void vector_save(vector *v, char *filename);
 void vector_save_fp(vector *v, MPI_File *f);
+void vector_print(vector *v);
 void vector_delete(vector *v);
 
 

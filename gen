@@ -1,3 +1,0 @@
-#!/bin/bash
-make -f Makefile_generate
-mpisubmit.bg -n 1 --stdout gen_out.txt generate -- $1

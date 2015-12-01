@@ -17,36 +17,41 @@ def generate_matrix(n):
     
 def save_vector(l, filename):
     f = open(filename, 'wb') 
+    save_vector_fp(l, filename);
+    f.close()
+
+def save_vector_fp(l, filename):
     f.write(pack('q', len(l)))
     for i in l:
-         f.write(pack('q', i))
-    f.close()
+        f.write(pack('d', i))
             
 def load_vector(filename):
-    result = []
     f = open(filename, 'rb')
+    result = load_vector_fp(f)
+    return result
+
+def load_vector_fp(f):
+    result = []
     length = unpack('q', f.read(8))[0]
     for i in range(length):
-        result.append(unpack('q', f.read(8))[0])
-    f.close()
-    return result 
-           
+        result.append(unpack('d', f.read(8))[0])
+    return result
+
 def save_matrix(m, filename):
     f = open(filename, 'wb')
     f.write(pack('q', len(m)))
+    f.write(pack('q', len(m[0])))
     for l in m:
-        for i in l:
-            f.write(pack('q', i))
+        save_vector_fp(l, f)
     f.close()
                 
 def load_matrix(filename):
     result = []
     f = open(filename, 'rb')
-    length = unpack('q', f.read(8))[0]
-    for i in range(length):
-        row = []
-        for j in range(length):
-            row.append(unpack('q', f.read(8))[0])
+    row_count = unpack('q', f.read(8))[0]
+    col_count = unpack('q', f.read(8))[0]
+    for i in range(row_count):
+        row = load_vector_fp(f)
         result.append(row)
     f.close()
     return result
