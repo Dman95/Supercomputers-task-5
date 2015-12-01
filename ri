@@ -1,0 +1,4 @@
+#!/bin/bash
+rm out$1.txt
+make
+mpisubmit.bg -n $1 --wtime $2 --stdout out$1.txt main -- $3 $1
