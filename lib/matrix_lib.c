@@ -215,7 +215,7 @@ void matrix_print(matrix *m)
     printf("Matrix %lld x %lld\n", m->row_count, m->column_count);
     for (long long i = 0; i < m->row_count; ++i) {
         if (i > 10) {
-            printf("[ ... ]");
+            printf("[ ... ]\n");
             break;
         }
         printf("[");
@@ -257,5 +257,49 @@ vector *multiply(matrix *m, vector *v)
         result->values[i] = dot(m->rows[i], v);
     }
     return result;
+}
+
+//return non null only in root = 0 process
+vector *mpi_multiply(char *matrixname, char *vectorname)
+{
+    int myrank, size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    
+    //count result
+    matrix *m = matrix_load_part(matrixname, myrank, size);
+    vector *v = vector_load(vectorname);
+    vector *result = multiply(m, v);
+
+    //gather result
+    vector *final_result = NULL;
+    int *recvcounts = NULL;
+    int *displs = NULL;
+    if (!myrank) {
+        final_result = vector_new(v->size);
+        recvcounts = calloc(size, sizeof(int));
+        displs = calloc(size, sizeof(int));
+        int count = v->size / size;
+        int displ = 0;
+        for (int i = 0; i < size - 1; ++i) {
+            recvcounts[i] = count;
+            displs[i] = displ;
+            displ += count;
+        }
+        recvcounts[size - 1] = v->size - displ;
+        displs[size - 1] = displ;
+    }
+    MPI_Gatherv(result->values, result->size, MPI_DOUBLE, (final_result != 0) ? final_result->values : 0, recvcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    
+    //clean
+    if (!myrank) {
+        free(recvcounts);
+        free(displs);
+    }
+    matrix_delete(m);
+    vector_delete(v);
+    vector_delete(result);
+
+    return final_result;
 }
 

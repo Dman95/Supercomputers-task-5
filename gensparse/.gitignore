@@ -1,0 +1,4 @@
+generate_sparse
+*out.txt
+*.o
+*.pyc

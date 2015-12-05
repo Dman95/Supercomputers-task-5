@@ -42,6 +42,7 @@ void matrix_delete(matrix *m);
 //multiplication operations
 double dot(vector *v1, vector *v2);
 vector *multiply(matrix *m, vector *v);
+vector *mpi_multiply(char *matrixname, char *vectorname);
 
 #endif
 

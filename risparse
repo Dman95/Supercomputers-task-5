@@ -1,0 +1,4 @@
+#!/bin/bash
+rm out$1.txt
+make
+mpisubmit.bg -n $1 --wtime 00:03:00 --stdout out$1.txt main -- $2 $1 --sparse

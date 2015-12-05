@@ -2,188 +2,370 @@
 #include <stdlib.h>
 #include <time.h>
 #include "mpi.h"
+#include "sparse_lib.h"
+#include <math.h>
 
-typedef struct sparse_value
+//vector operations
+sparse_vector *sparse_vector_new(long long size)
 {
-    long long index;
-    long long value;
-} sparse_value;
-
-typedef struct sparse_vector
-{
-    long long size;
-    sparse_value *values;
-} sparse_vector;
-
-sparse_vector *sv_new(long long size)
-{
-    sparse_vector *vector = calloc(1, sizeof(sparse_vector));
-    vector->values = calloc(size, sizeof(sparse_value));
-    return vector;
+    sparse_vector *v = calloc(1, sizeof(sparse_vector));
+    v->non_zero_count = 0;
+    v->size = size;
+    v->values = calloc(size, sizeof(sparse_value));
+    return v;
 }
 
-void sv_push_back(sparse_vector *vector, sparse_value *value)
+double uniform_random()
 {
-    vector->values[vector->size++] = *value;
+    return ((double) rand()) / RAND_MAX;
 }
 
-void sv_shrink_to_fit(sparse_vector *vector)
+long long geom_random(double non_zero_probability, long long max)
 {
-    realloc(vector->values, vector->size * sizeof(sparse_value));
+    double r = log(uniform_random()) / log(1 - non_zero_probability);
+    return (r > max) ? max : ((long long) r);
 }
 
-void sv_delete(sparse_vector *vector)
+sparse_vector *sparse_vector_gen(long long size, double non_zero_probability)
 {
-    free(vector->values);
-    free(vector);
-}
-
-typedef struct sparse_matrix
-{
-    long long row_count;
-    long long column_count;
-    sparse_vector **rows;
-} sparse_matrix;
-
-sparse_matrix sm_new(long long row_count, long long column_count)
-{   
-    sparse_matrix *matrix = calloc(1, sizeof(sparse_matrix));
-    matrix->rows = calloc(row_count, sizeof(sparse_vector *));
-    matrix->row_count = row_count;
-    matrix->column_count = column_count;
-    return matrix;
-}
-
-void sm_set_vector(sparse_matrix *matrix, int index, sparse_vector *vector)
-{
-    matrix->rows[index] = vector;
-}
-
-void sm_delete(sparse_matrix *matrix)
-{
-    for (long long i = 0; i < matrix->size; ++i) {
-        sv_delete(matrix->rows[i]);
+    sparse_vector *v = sparse_vector_new(size);
+    for (long long i = geom_random(non_zero_probability, size); 
+                   i < size; 
+                   i += 1 + geom_random(non_zero_probability, size)) {
+        double r =  ((double) rand()) / RAND_MAX;
+        sparse_vector_push_back(v, i, r);
     }
-    free(matrix);
+    sparse_vector_shrink_to_fit(v);
+    return v;
 }
 
-void generate_sparse_vector(sparse_vector **vector, long long size, double non_zero_probability)
+sparse_vector *sparse_vector_load(char *filename)
 {
-    *vector = sv_new(size);
-    count = 0;
-    for (long long i = 0; i < size; ++i) {
-        double p = rand() / RAND_MAX;
-        if (p < non_zero_probability) {
-            unsigned short r = rand();
-            sparse_value v;
-            v.index = i;
-            v.value = r;
-            sv_push_back(vector, &v);
-        }
-    }
-    sv_shrink_to_fit(vector);
+    MPI_File f;
+    MPI_File_open(MPI_COMM_SELF, filename, MPI_MODE_RDONLY, MPI_INFO_NULL, &f);
+    
+    //load vector
+    sparse_vector *v = sparse_vector_load_fp(&f);
+    
+    MPI_File_close(&f);
+    return v;
 }
 
-void sv_write(sparse_vector *v, MPI_File *f)
+sparse_vector *sparse_vector_load_fp(MPI_File *f)
 {
     MPI_Status s;
-    MPI_file_write(f, &v->size, 1, MPI_LONG_LONG, &s);
-    MPI_File_write(f, v->values, v->size * sizeof(sparse_value), MPI_CHAR, &s);
-}
 
-sparse_vector *sv_read(MPI_file *f)
-{
-    MPI_Status s;
+    //load size
     long long size;
-    MPI_File_read(f, &size, 1, MPI_LONG_LONG, &s);
-    sparse_vector *vector = sv_new(size);
-    MPI_File_read(f, vector->values, size * sizeof(sparse_value), MPI_CHAR, &s);
-    vector->size = size;
-    return vector;
+    MPI_File_read(*f, &size, 1, MPI_LONG_LONG, &s);
+    sparse_vector *v = sparse_vector_new(size);
+    
+    //load values
+    MPI_File_read(*f, v->values, size * sizeof(sparse_value), MPI_CHAR, &s);
+    v->non_zero_count = size;
+
+    return v;
 }
 
-void generate_and_save_sparse_matrix(char *filename, long long size, double non_zero_probability)
+long long sparse_vector_serialized_size(sparse_vector *v)
+{
+    return sizeof(long long) + sizeof(sparse_value) * v->non_zero_count;
+}
+
+void sparse_vector_save(sparse_vector *v, char *filename)
 {
     MPI_File f;
     MPI_Status s;
-    MPI_File_open(MPI_COMM_SELF, filename, MPI_MODE_WRONLY | MPI_MODE_CREATE, MPI_INFO_NULL, &f);
-    MPI_File_write(f, &size, 1, MPI_LONG_LONG, &s);
+    MPI_File_open(MPI_COMM_SELF, filename, MPI_MODE_WRONLY | MPI_MODE_CREATE, MPI_INFO_NULL, &f); 
+    
+    //save vector
+    sparse_vector_save_fp(v, &f);
 
-    long long position = sizeof(long long);
-
-    //omit section for offsets
-    MPI_File_seek(f, size * sizeof(long long), MPI_SEEK_CUR);
-    long long *offsets = calloc(size, sizeof(long long));
-    position += size * sizeof(long long);
-
-    for (long long i = 0; i < size; ++i) {
-        sparse_vector *vector;
-        generate_sparse_vector(&vector, size, non_zero_probability);
-        offsets[i] = position;
-        sv_write(vector, &f);
-        position += vector->size;
-        free(vector);
-    }
-    MPI_File_seek(f, sizeof(long long), MPI_SEEK_SET);
-    MPI_File_write(f, offsets, size, MPI_LONG_LONG, &s);
-    free(offsets);
     MPI_File_close(&f);
 }
 
-void load_sparse_matrix_part(char *filename, sparse_matrix **matrix, long long which, long long from_how_much, long long *row_count, long long *column_count) 
+void sparse_vector_save_fp(sparse_vector *v, MPI_File *f)
+{
+    MPI_Status s;
+
+    //save size
+    MPI_File_write(*f, &v->non_zero_count, 1, MPI_LONG_LONG, &s);
+
+    //save values
+    MPI_File_write(*f, v->values, v->non_zero_count * sizeof(sparse_value), MPI_CHAR, &s);
+}
+
+void sparse_vector_push_back(sparse_vector *v, long long index, double value)
+{
+    v->values[v->non_zero_count].index = index;
+    v->values[v->non_zero_count].value = value;
+    v->non_zero_count++;
+}
+
+void sparse_vector_shrink_to_fit(sparse_vector *v)
+{
+    v->values = realloc(v->values, v->non_zero_count * sizeof(sparse_value));
+    v->size = v->non_zero_count;
+}
+
+void sparse_vector_print(sparse_vector *v)
+{
+    printf("Sparse vector 1 x %lld (capacity %lld)\n", v->non_zero_count, v->size);
+    printf("[ ");
+    for (long long j = 0; j < v->non_zero_count; ++j) {
+        printf("(%lld, %f) ", v->values[j].index, v->values[j].value);
+        if (j > 10) {
+            printf("... ");
+            break;
+        }
+    }
+    printf("]\n");
+}
+
+void sparse_vector_delete(sparse_vector *v)
+{
+    free(v->values);
+    free(v);
+}
+
+
+//matrix operations
+sparse_matrix *sparse_matrix_new(long long row_count, long long column_count)
+{
+    sparse_matrix *m = sparse_matrix_new_without_vector_init(row_count, column_count);
+    for (long long i = 0; i < row_count; ++i) {
+        m->rows[i] = sparse_vector_new(column_count);
+    }
+    return m;
+}
+
+sparse_matrix *sparse_matrix_new_without_vector_init(long long row_count, long long column_count)
+{
+    sparse_matrix *m = calloc(1, sizeof(sparse_matrix));
+    m->row_count = row_count;
+    m->column_count = column_count;
+    m->rows = calloc(row_count, sizeof(sparse_vector *));
+    return m;
+}
+
+sparse_matrix *sparse_matrix_gen(long long row_count, long long column_count, double non_zero_probability)
+{
+    sparse_matrix *m = sparse_matrix_new_without_vector_init(row_count, column_count);
+    for (long long i = 0; i < row_count; ++i) {
+        m->rows[i] = sparse_vector_gen(column_count, non_zero_probability);
+    }
+    return m;
+}
+
+sparse_matrix *sparse_matrix_load(char *filename)
+{
+    MPI_File f;
+    MPI_Status s;
+    MPI_File_open(MPI_COMM_SELF, filename, MPI_MODE_RDONLY, MPI_INFO_NULL, &f);
+
+    long long row_count, column_count;
+    MPI_File_read(f, &row_count, 1, MPI_LONG_LONG, &s);
+    MPI_File_read(f, &column_count, 1, MPI_LONG_LONG, &s);
+
+    //omit offsets
+    MPI_File_seek(f, row_count * sizeof(long long), MPI_SEEK_CUR);
+
+    //load rows
+    sparse_matrix *m = sparse_matrix_new_without_vector_init(row_count, column_count);
+    for (long long i = 0; i < row_count; ++i) {
+        sparse_vector *row = sparse_vector_load_fp(&f);
+        m->rows[i] = row;
+    }
+
+    MPI_File_close(&f);
+    return m;
+}
+
+sparse_matrix *sparse_matrix_load_part(char *filename, long long which, long long from_how_much) 
 //e.g. which = 0, from_how_much = 4 should load 25% of rows
 {
     MPI_File f;
     MPI_Status s;
     MPI_File_open(MPI_COMM_SELF, filename, MPI_MODE_RDONLY, MPI_INFO_NULL, &f);
-    long long size;
-    MPI_File_read(f, &size, 1, MPI_LONG_LONG, &s);
-    long long one_part_size_in_rows = size / from_how_much;
 
-    long long *offsets = calloc(size, sizeof(long long));
-    MPI_File_read(f, offsets, size, MPI_LONG_LONG, &s);
+    //read row and column counts
+    long long row_count, column_count;
+    MPI_File_read(f, &row_count, 1, MPI_LONG_LONG, &s);
+    MPI_File_read(f, &column_count, 1, MPI_LONG_LONG, &s);
 
-    long long start_offset = offsets[one_part_size_in_rows * which];
-    MPI_File_seek(f, start_offset, MPI_SEEK_SET);
+    //seek to our part of data
+    long long one_part_size_in_rows = row_count / from_how_much;
+    long long start_row = one_part_size_in_rows * which;
+    //read start row offset
+    MPI_File_seek(f, start_row * sizeof(long long), MPI_SEEK_CUR);
+    long long start_row_offset = 0;
+    MPI_File_read(f, &start_row_offset, 1, MPI_LONG_LONG, &s);
+    MPI_File_seek(f, start_row_offset, MPI_SEEK_SET); 
 
-    long long remainder = size - one_part_size_in_rows * from_how_much;
-    long long needed_to_read_rows_count = one_part_size_in_rows + ((which == from_how_much - 1) ? remainder : 0);
+    //count amount of data to read
+    long long remainder = row_count - one_part_size_in_rows * from_how_much;
+    long long needed_to_read_row_count = one_part_size_in_rows + ((which == from_how_much - 1) ? remainder : 0);
 
-    *matrix = sm_new(needed_to_read_rows_count, size);
-    for (int i = 0; i < needed_to_read_rows_count; ++i) {
-        sparse_vector *vector = sv_read(f);
-        sm_set_vector(*matrix, i, vector);
+    //read data
+    sparse_matrix *m = sparse_matrix_new_without_vector_init(needed_to_read_row_count, column_count);
+    for (long long i = 0; i < needed_to_read_row_count; ++i) {
+        sparse_vector *row = sparse_vector_load_fp(&f);
+        m->rows[i] = row;
     }
+
     MPI_File_close(&f);
-    *row_count = needed_to_read_rows_count;
-    *column_count = size;
+    return m;
 }
 
-long long dot(sparse_vector *v1, long long *v2)
+void sparse_matrix_save(sparse_matrix *m, char *filename)
 {
-    long long result = 0;
-    for (long long i = 0; i < v1->size; ++i) {
-        result += v1->values[i].value * v2[v1->values[i].index];
+    MPI_File f;
+    MPI_Status s;
+    MPI_File_open(MPI_COMM_SELF, filename, MPI_MODE_WRONLY | MPI_MODE_CREATE, MPI_INFO_NULL, &f);
+
+    MPI_File_write(f, &m->row_count, 1, MPI_LONG_LONG, &s);
+    MPI_File_write(f, &m->column_count, 1, MPI_LONG_LONG, &s);
+
+    //place for offsets
+    long long current_offset = sizeof(long long) + sizeof(long long) + m->row_count * sizeof(long long);
+    MPI_File_seek(f, current_offset, MPI_SEEK_SET);
+    long long *offsets = calloc(m->row_count, sizeof(long long));
+
+    //save rows
+    for (long long i = 0; i < m->row_count; ++i) {
+        offsets[i] = current_offset;
+        sparse_vector_save_fp(m->rows[i], &f);
+        current_offset += sparse_vector_serialized_size(m->rows[i]);
+    }
+
+    //save offsets
+    MPI_File_seek(f, sizeof(long long) + sizeof(long long), MPI_SEEK_SET);
+    MPI_File_write(f, offsets, m->row_count, MPI_LONG_LONG, &s);
+    free(offsets);
+
+    MPI_File_close(&f);
+}
+
+void sparse_matrix_gen_and_save(long long row_count, long long column_count, char *filename, double non_zero_probability)
+{
+    MPI_File f;
+    MPI_Status s;
+    MPI_File_open(MPI_COMM_SELF, filename, MPI_MODE_WRONLY | MPI_MODE_CREATE, MPI_INFO_NULL, &f);
+    
+    MPI_File_write(f, &row_count, 1, MPI_LONG_LONG, &s);
+    MPI_File_write(f, &column_count, 1, MPI_LONG_LONG, &s);
+
+    //place for offsets
+    long long current_offset = sizeof(long long) + sizeof(long long) + row_count * sizeof(long long);
+    MPI_File_seek(f, current_offset, MPI_SEEK_SET);
+    long long *offsets = calloc(row_count, sizeof(long long));
+
+    //save rows
+    for (long long i = 0; i < row_count; ++i) {
+        offsets[i] = current_offset;
+        sparse_vector *v = sparse_vector_gen(column_count, non_zero_probability);
+        sparse_vector_save_fp(v, &f);
+        current_offset += sparse_vector_serialized_size(v);
+        sparse_vector_delete(v);
+    }
+
+    //save offsets
+    MPI_File_seek(f, sizeof(long long) + sizeof(long long), MPI_SEEK_SET);
+    MPI_File_write(f, offsets, row_count, MPI_LONG_LONG, &s);
+    free(offsets);
+
+    MPI_File_close(&f);
+}
+
+void sparse_matrix_print(sparse_matrix *m)
+{
+    printf("Sparse matrix %lld x %lld\n", m->row_count, m->column_count);
+    for (long long i = 0; i < m->row_count; ++i) {
+        if (i > 10) {
+            printf("[ ... ]\n");
+            break;
+        }
+        printf("[");
+        for (long long j = 0; j < m->rows[i]->size; ++j) {
+            printf("(%lld, %f) ", m->rows[i]->values[j].index, m->rows[i]->values[j].value);
+            if (j > 10) {
+                printf("... ");
+                break;
+            }
+        }
+        printf("]\n");
+    }
+}
+
+void sparse_matrix_delete(sparse_matrix *m)
+{
+    for (long long i = 0; i < m->row_count; ++i) {
+        sparse_vector_delete(m->rows[i]);
+    }
+    free(m->rows);
+    free(m);
+}
+
+
+//multiplication functions
+double sparse_dot(sparse_vector *v1, vector *v2)
+{
+    double result = 0;
+    for (long long i = 0; i < v1->non_zero_count; ++i) {
+        result += v1->values[i].value * v2->values[v1->values[i].index]; 
     }
     return result;
 }
 
-void multiply(sparse_matrix *matrix, long long *vector, long long *result)
+vector *sparse_multiply(sparse_matrix *m, vector *v)
 {
-    for (long long i = 0; i < matrix->row_count; ++i) {
-        result[i] = dot(matrix->rows[i], vector);
+    vector *result = vector_new(m->row_count);
+    for (long long i = 0; i < m->row_count; ++i) {
+        result->values[i] = sparse_dot(m->rows[i], v);
     }
+    return result;
 }
 
-void print_sparse_matrix(sparse_matrix *matrix)
-{
-    printf("Matrix %lld x %lld\n", matrix->row_count, matrix->column_count);
-    for (long long i = 0; i < matrix->row_count; ++i) {
-        printf("[");
-        for (long long j = 0; j < matrix->rows[i]->size; ++j) {
-            printf("(%lld %lld) ", matrix->rows[i]->values[j].index, matrix->rows[i]->values[j].value);
+vector *mpi_sparse_multiply(char *matrixname, char *vectorname)
+{   
+    int myrank, size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    
+    //count result
+    sparse_matrix *m = sparse_matrix_load_part(matrixname, myrank, size);
+    vector *v = vector_load(vectorname);
+    vector *result = sparse_multiply(m, v);
+    
+    //gather result
+    vector *final_result = NULL;
+    int *recvcounts = NULL;
+    int *displs = NULL;
+    if (!myrank) {
+        final_result = vector_new(v->size);
+        recvcounts = calloc(size, sizeof(int));
+        displs = calloc(size, sizeof(int));
+        int count = v->size / size;
+        int displ = 0;
+        for (int i = 0; i < size - 1; ++i) {
+            recvcounts[i] = count;
+            displs[i] = displ;
+            displ += count;
         }
-        printf("]\n");
+        recvcounts[size - 1] = v->size - displ;
+        displs[size - 1] = displ;
     }
+    MPI_Gatherv(result->values, result->size, MPI_DOUBLE, (final_result != 0) ? final_result->values : 0, recvcounts, displs, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+    
+    //clean
+    if (!myrank) {
+        free(recvcounts);
+        free(displs);
+    }
+    sparse_matrix_delete(m);
+    vector_delete(v);
+    vector_delete(result);
+
+    return final_result;
 }
 
