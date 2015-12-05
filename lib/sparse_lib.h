@@ -33,6 +33,8 @@ void sparse_vector_save_fp(sparse_vector *v, MPI_File *f);
 void sparse_vector_push_back(sparse_vector *v, long long index, double value);
 void sparse_vector_shrink_to_fit(sparse_vector *v);
 void sparse_vector_print(sparse_vector *v);
+char *sparse_vector_serialize(sparse_vector *v);
+sparse_vector *sparse_vector_deserialize(char *serialized);
 void sparse_vector_delete(sparse_vector *v);
 
 
@@ -51,6 +53,7 @@ sparse_matrix *sparse_matrix_load(char *filename);
 sparse_matrix *sparse_matrix_load_part(char *filename, long long which, long long from_how_much);
 void sparse_matrix_save(sparse_matrix *m, char *filename);
 void sparse_matrix_gen_and_save(long long row_count, long long column_count, char *filename, double non_zero_probability);
+void mpi_sparse_matrix_gen_and_save(long long row_count, long long column_count, char *filename, double non_zero_probability);
 void sparse_matrix_print(sparse_matrix *m);
 void sparse_matrix_delete(sparse_matrix *m);
 

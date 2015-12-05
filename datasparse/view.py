@@ -22,6 +22,8 @@ def load_matrix(filename):
     col_count = unpack('q', f.read(8))[0]
     f.seek(row_count * 8, 1)
     for i in range(row_count):
+        if i % 1000 == 0:
+            print "Loading row %d" % (i)
         row = load_vector_fp(f)
         result.append(row)
     f.close()

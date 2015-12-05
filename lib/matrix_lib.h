@@ -43,6 +43,7 @@ void matrix_delete(matrix *m);
 double dot(vector *v1, vector *v2);
 vector *multiply(matrix *m, vector *v);
 vector *mpi_multiply(char *matrixname, char *vectorname);
+long long count_part(long long which, long long from_how_much, long long from_what);
 
 #endif
 

@@ -1,0 +1,3 @@
+#!/bin/bash
+make
+mpisubmit.bg -n $3 --stdout out.txt --wtime 01:00:00 generate_sparse -- $1 $2

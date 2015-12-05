@@ -22,7 +22,7 @@ int main(int argc, char **argv)
     vector_delete(v);
 
     //generate sparse matrix
-    sparse_matrix_gen_and_save(size, size, matrixname, 1.0 * coef / size);
+    mpi_sparse_matrix_gen_and_save(size, size, matrixname, 1.0 * coef / size);
     
     MPI_Finalize();
     return 0;

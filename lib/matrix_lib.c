@@ -155,13 +155,10 @@ matrix *matrix_load_part(char *filename, long long which, long long from_how_muc
     MPI_File_read(f, &column_count, 1, MPI_LONG_LONG, &s);
 
     //seek to our part of data
+    long long needed_to_read_row_count = count_part(which, from_how_much, row_count);
     long long one_part_size_in_rows = row_count / from_how_much;
     long long row_size_in_bytes = sizeof(long long) + sizeof(double) * column_count;
     MPI_File_seek(f, row_size_in_bytes * one_part_size_in_rows * which, MPI_SEEK_CUR); 
-
-    //count amount of data to read
-    long long remainder = row_count - one_part_size_in_rows * from_how_much;
-    long long needed_to_read_row_count = one_part_size_in_rows + ((which == from_how_much - 1) ? remainder : 0);
 
     //read data
     matrix *m = matrix_new_without_vector_init(needed_to_read_row_count, column_count);
@@ -303,3 +300,10 @@ vector *mpi_multiply(char *matrixname, char *vectorname)
     return final_result;
 }
 
+long long count_part(long long which, long long from_how_much, long long from_what)
+{
+    long long one_part_size = from_what / from_how_much;
+    long long remainder = from_what - one_part_size * from_how_much;
+    long long part = one_part_size + ((which == from_how_much - 1) ? remainder : 0);
+    return part;
+}
