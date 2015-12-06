@@ -12,7 +12,11 @@ else:
 
 i = from_count
 while i <= to:
-    f = open(filetemplate % (i, n), 'r')
-    print('%d %f' % (i, float(f.read().split()[1])))
-    f.close()
+    try:
+        f = open(filetemplate % (i, n), 'r')
+        time = float(f.read().split()[1])
+        f.close()
+    except:
+        time = 0
+    print('%d %f' % (i, time))
     i *= 2

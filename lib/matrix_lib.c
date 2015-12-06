@@ -142,23 +142,33 @@ matrix *matrix_load(char *filename)
     return m;
 }
 
-matrix *matrix_load_part(char *filename, long long which, long long from_how_much) 
-//e.g. which = 0, from_how_much = 4 should load 25% of rows
+
+MPI_File matrix_get_file_started_from_part(char *filename, long long which, long long from_how_much, long long *needed_to_read_row_count, 
+        long long *column_count)
 {
     MPI_File f;
     MPI_Status s;
     MPI_File_open(MPI_COMM_SELF, filename, MPI_MODE_RDONLY, MPI_INFO_NULL, &f);
 
     //read row and column counts
-    long long row_count, column_count;
+    long long row_count;
     MPI_File_read(f, &row_count, 1, MPI_LONG_LONG, &s);
-    MPI_File_read(f, &column_count, 1, MPI_LONG_LONG, &s);
+    MPI_File_read(f, column_count, 1, MPI_LONG_LONG, &s);
 
     //seek to our part of data
-    long long needed_to_read_row_count = count_part(which, from_how_much, row_count);
+    *needed_to_read_row_count = count_part(which, from_how_much, row_count);
     long long one_part_size_in_rows = row_count / from_how_much;
-    long long row_size_in_bytes = sizeof(long long) + sizeof(double) * column_count;
+    long long row_size_in_bytes = sizeof(long long) + sizeof(double) * (*column_count);
     MPI_File_seek(f, row_size_in_bytes * one_part_size_in_rows * which, MPI_SEEK_CUR); 
+
+    return f;
+}
+
+matrix *matrix_load_part(char *filename, long long which, long long from_how_much) 
+//e.g. which = 0, from_how_much = 4 should load 25% of rows
+{
+    long long needed_to_read_row_count, column_count;
+    MPI_File f = matrix_get_file_started_from_part(filename, which, from_how_much, &needed_to_read_row_count, &column_count);
 
     //read data
     matrix *m = matrix_new_without_vector_init(needed_to_read_row_count, column_count);
@@ -263,10 +273,21 @@ vector *mpi_multiply(char *matrixname, char *vectorname)
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     
+
     //count result
-    matrix *m = matrix_load_part(matrixname, myrank, size);
     vector *v = vector_load(vectorname);
-    vector *result = multiply(m, v);
+    
+    long long needed_to_read_row_count, column_count;
+    MPI_File matrix_file = matrix_get_file_started_from_part(matrixname, myrank, size, &needed_to_read_row_count, &column_count);
+    
+    vector *result = vector_new(needed_to_read_row_count);
+    for (long long i = 0; i < needed_to_read_row_count; ++i) {
+        vector *row = vector_load_fp(&matrix_file);
+        result->values[i] = dot(row, v);
+        vector_delete(row);
+    }
+
+    MPI_File_close(&matrix_file);
 
     //gather result
     vector *final_result = NULL;
@@ -293,7 +314,6 @@ vector *mpi_multiply(char *matrixname, char *vectorname)
         free(recvcounts);
         free(displs);
     }
-    matrix_delete(m);
     vector_delete(v);
     vector_delete(result);
 

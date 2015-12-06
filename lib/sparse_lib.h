@@ -50,6 +50,7 @@ sparse_matrix *sparse_matrix_new(long long row_count, long long column_count);
 sparse_matrix *sparse_matrix_new_without_vector_init(long long row_count, long long column_count);
 sparse_matrix *sparse_matrix_gen(long long row_count, long long column_count, double non_zero_probability);
 sparse_matrix *sparse_matrix_load(char *filename);
+MPI_File sparse_matrix_get_file_started_from_part(char *filename, long long which, long long from_how_much, long long *needed_to_read_row_count, long long *column_count);
 sparse_matrix *sparse_matrix_load_part(char *filename, long long which, long long from_how_much);
 void sparse_matrix_save(sparse_matrix *m, char *filename);
 void sparse_matrix_gen_and_save(long long row_count, long long column_count, char *filename, double non_zero_probability);

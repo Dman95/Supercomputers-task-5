@@ -1,4 +1,12 @@
 #!/bin/bash
 rm out$1.txt
 make
-mpisubmit.bg -n $1 --wtime 00:03:00 --stdout out$1_$2.txt main -- $2 $1 --dense
+
+if [ $1 -gt 128 ];
+then
+    t=00:03:00
+else
+    t=00:15:00
+fi
+
+mpisubmit.bg -n $1 --wtime $t --stdout out$1_$2.txt main -- $2 $1 --dense
