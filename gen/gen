@@ -1,3 +1,3 @@
 #!/bin/bash
 make
-mpisubmit.bg -n 1 --stdout out.txt generate -- $1
+mpisubmit.bg -n 1 --stdout out.txt --wtime 02:00:00 generate -- $1
