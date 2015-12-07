@@ -1,5 +1,5 @@
 #!/bin/bash
-rm out$1.txt
+rm out$2_$3_$1.txt
 make
 
 if [ $1 -gt 128 ];
@@ -9,4 +9,4 @@ else
     t=00:15:00
 fi
 
-mpisubmit.bg -n $1 --wtime $t --stdout out$1_$2.txt main -- $2 $1 --dense
+mpisubmit.bg -n $1 --wtime $t --stdout out$2_$3_$1.txt main -- $2 $3 $1

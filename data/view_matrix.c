@@ -4,13 +4,11 @@ int main(int argc, char **argv)
 {
     MPI_Init(&argc, &argv);
 
-    matrix *m = matrix_load(argv[1]);
-    matrix_print(m);
-    matrix_delete(m);
-
-    vector *v = vector_load(argv[2]);
-    vector_print(v);
-    vector_delete(v);
+    for (int i = 1; i < argc; ++i) {
+        matrix *m = matrix_load(argv[i]);
+        matrix_print(m);
+        matrix_delete(m);
+    }
 
     MPI_Finalize();
 }

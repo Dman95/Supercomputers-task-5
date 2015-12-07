@@ -142,6 +142,17 @@ matrix *matrix_load(char *filename)
     return m;
 }
 
+void matrix_get_size(char *filename, long long *row_count, long long *column_count)
+{
+    MPI_File f;
+    MPI_Status s;
+    MPI_File_open(MPI_COMM_SELF, filename, MPI_MODE_RDONLY, MPI_INFO_NULL, &f);
+
+    MPI_File_read(f, row_count, 1, MPI_LONG_LONG, &s);
+    MPI_File_read(f, column_count, 1, MPI_LONG_LONG, &s);
+
+    MPI_File_close(&f);
+}
 
 MPI_File matrix_get_file_started_from_part(char *filename, long long which, long long from_how_much, long long *needed_to_read_row_count, 
         long long *column_count)
@@ -277,7 +288,6 @@ void matrix_delete(matrix *m)
     free(m);
 }
 
-
 //multiplication functions
 double dot(vector *v1, vector *v2)
 {
@@ -357,4 +367,85 @@ long long count_part(long long which, long long from_how_much, long long from_wh
     long long remainder = from_what - one_part_size * from_how_much;
     long long part = one_part_size + ((which == from_how_much - 1) ? remainder : 0);
     return part;
+}
+
+void mpi_multiply_and_save_matrix(char *A_matrixname, char *B_matrixname, char *resultname)
+{
+    int myrank, size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    
+    //load A and B matrix parts
+    matrix *A_part = matrix_load_part(A_matrixname, myrank, size);
+    matrix *B_part = matrix_load_part(B_matrixname, myrank, size);
+    long long A_row_count, A_column_count, B_row_count, B_column_count;
+    matrix_get_size(A_matrixname, &A_row_count, &A_column_count);
+    matrix_get_size(B_matrixname, &B_row_count, &B_column_count);
+    if (A_column_count != B_row_count) {
+        printf("Inconsistent column and row counts\n");
+        exit(-1);
+    }
+
+    //go through all B columns and gather them
+    //init displs and recvcounts
+    int *displs = calloc(size, sizeof(int));
+    int *recvcounts = calloc(size, sizeof(int));
+    int offset = 0;
+    for (int i = 0; i < size; ++i) {
+        displs[i] = offset;
+        recvcounts[i] = count_part(i, size, B_row_count);
+        offset += recvcounts[i];
+    }
+    //count result matrix part
+    matrix *result_part = matrix_new(A_part->row_count, B_column_count);
+    vector *B_column_part = vector_new(B_part->row_count);
+    vector *B_column = vector_new(B_row_count);
+    for (long long i = 0; i < B_column_count; ++i) {
+        //get column part
+        for (long long j = 0; j < B_part->row_count; ++j) {
+            B_column_part->values[j] = B_part->rows[j]->values[i];
+        }
+        //gather full column
+        MPI_Allgatherv(B_column_part->values, B_column_part->size, MPI_DOUBLE, B_column->values, recvcounts, displs, 
+                                                                   MPI_DOUBLE, MPI_COMM_WORLD);
+        //count multiplication
+        vector *result_part_column = multiply(A_part, B_column);
+        for (long long j = 0; j < result_part_column->size; ++j) {
+            result_part->rows[j]->values[i] = result_part_column->values[j];
+        }
+        vector_delete(result_part_column);
+    }
+    vector_delete(B_column);
+    vector_delete(B_column_part);
+    free(displs);
+    free(recvcounts);
+
+    //now we have part of rows of matrix B in result_part matrix, we can write it
+    if (!myrank) {
+        //write size
+        MPI_File f;
+        MPI_Status s;
+        MPI_File_open(MPI_COMM_SELF, resultname, MPI_MODE_WRONLY | MPI_MODE_CREATE, MPI_INFO_NULL, &f);
+        MPI_File_write(f, &A_row_count, 1, MPI_LONG_LONG, &s);
+        MPI_File_write(f, &B_column_count, 1, MPI_LONG_LONG, &s);
+        MPI_File_close(&f);
+    }
+    MPI_File resultfile = get_file_with_offset_for_write(resultname, 2 * sizeof(long long) + 
+            count_part(0, size, A_row_count) * myrank * (sizeof(long long) + B_column_count * sizeof(double)));
+    for (long long i = 0; i < result_part->row_count; ++i) {
+        vector_save_fp(result_part->rows[i], &resultfile);
+    }
+    MPI_File_close(&resultfile);    
+}
+
+MPI_File get_file_with_offset_for_write(char *filename, long long offset)
+{
+    MPI_File f;
+    MPI_Status s;
+    MPI_File_open(MPI_COMM_WORLD, filename, MPI_MODE_WRONLY | MPI_MODE_CREATE, MPI_INFO_NULL, &f);
+
+    //seek to our part of data
+    MPI_File_seek(f, offset, MPI_SEEK_SET); 
+
+    return f;
 }

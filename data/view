@@ -1,3 +1,3 @@
 #!/bin/bash
 make
-mpisubmit.bg -n 1 --stdout out.txt view_matrix -- $1 $2
+mpisubmit.bg -n 1 --stdout out.txt view_matrix -- "$@"

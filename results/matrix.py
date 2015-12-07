@@ -1,20 +1,6 @@
 import random
 from struct import pack, unpack
 
-def generate_vector(n):
-    l = []
-    for i in range(n):
-        r = random.randint(0, 100)
-        l.append(r)
-    return l
-    
-def generate_matrix(n):
-    m = []
-    for i in range(n):
-        print i
-        m.append(generate_vector(n))
-    return m
-    
 def save_vector(l, filename):
     f = open(filename, 'wb') 
     save_vector_fp(l, filename);
@@ -58,8 +44,11 @@ def load_matrix(filename):
 
 def dot(v1, v2):
     return sum(x * y for x, y in zip(v1, v2))
-    
-def multiply(m, v):
-    n = len(v)
-    result = [dot(m[i], v) for i in range(n)]
-    return result
+   
+def multiply(m1, m2):
+    result = [[0 for j in range(len(m2[0]))] for i in range(len(m1))]
+    m2 = list(zip(*m2))
+    for i in range(len(m1)):
+        for j in range(len(m2)):
+            result[i][j] = dot(m1[i], m2[j])
+    return result 

@@ -4,3 +4,4 @@ generate
 main
 *.err
 core*
+*.pyc
