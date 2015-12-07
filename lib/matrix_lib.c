@@ -9,7 +9,9 @@ vector *vector_new(long long size)
 {
     vector *v = calloc(1, sizeof(vector));
     v->size = size;
-    v->values = calloc(size, sizeof(double));
+    if (size) {
+        v->values = calloc(size, sizeof(double));
+    }
     return v;
 }
 
@@ -108,7 +110,9 @@ matrix *matrix_new_without_vector_init(long long row_count, long long column_cou
     matrix *m = calloc(1, sizeof(matrix));
     m->row_count = row_count;
     m->column_count = column_count;
-    m->rows = calloc(row_count, sizeof(vector *));
+    if (row_count) {
+        m->rows = calloc(row_count, sizeof(vector *));
+    }
     return m;
 }
 
@@ -179,7 +183,7 @@ matrix *matrix_load_part(char *filename, long long which, long long from_how_muc
 //e.g. which = 0, from_how_much = 4 should load 25% of rows
 {
     long long needed_to_read_row_count, column_count;
-    MPI_File f = matrix_get_file_started_from_part(filename, which, from_how_much, &needed_to_read_row_count, &column_count);
+    MPI_File f = matrix_get_file_started_from_part(filename, which, from_how_much, &needed_to_read_row_count, &column_count);    
 
     //read data
     matrix *m = matrix_new_without_vector_init(needed_to_read_row_count, column_count);
@@ -314,12 +318,11 @@ vector *mpi_multiply(char *matrixname, char *vectorname)
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     
-
     //count result
     vector *v = vector_load(vectorname);
     
     long long needed_to_read_row_count, column_count;
-    MPI_File matrix_file = matrix_get_file_started_from_part(matrixname, myrank, size, &needed_to_read_row_count, &column_count);
+    MPI_File matrix_file = matrix_get_file_started_from_part(matrixname, myrank, size, &needed_to_read_row_count, &column_count); 
     
     vector *result = vector_new(needed_to_read_row_count);
     for (long long i = 0; i < needed_to_read_row_count; ++i) {
@@ -362,11 +365,16 @@ vector *mpi_multiply(char *matrixname, char *vectorname)
 }
 
 long long count_part(long long which, long long from_how_much, long long from_what)
-{
-    long long one_part_size = from_what / from_how_much;
-    long long remainder = from_what - one_part_size * from_how_much;
-    long long part = one_part_size + ((which == from_how_much - 1) ? remainder : 0);
-    return part;
+{    
+    long long one_part_size = (from_what + from_how_much - 1) / from_how_much;
+    if (one_part_size * which + one_part_size <= from_what) {
+        return one_part_size;
+    }
+    if (one_part_size * which >= from_what) {
+        return 0;
+    }
+    long long remainder = from_what % one_part_size;
+    return remainder;
 }
 
 void mpi_multiply_and_save_matrix(char *A_matrixname, char *B_matrixname, char *resultname)
@@ -374,7 +382,7 @@ void mpi_multiply_and_save_matrix(char *A_matrixname, char *B_matrixname, char *
     int myrank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
-    
+
     //load A and B matrix parts
     matrix *A_part = matrix_load_part(A_matrixname, myrank, size);
     matrix *B_part = matrix_load_part(B_matrixname, myrank, size);
@@ -435,7 +443,7 @@ void mpi_multiply_and_save_matrix(char *A_matrixname, char *B_matrixname, char *
     for (long long i = 0; i < result_part->row_count; ++i) {
         vector_save_fp(result_part->rows[i], &resultfile);
     }
-    MPI_File_close(&resultfile);    
+    MPI_File_close(&resultfile);
 }
 
 MPI_File get_file_with_offset_for_write(char *filename, long long offset)
