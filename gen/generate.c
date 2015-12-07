@@ -14,17 +14,23 @@ int main(int argc, char **argv)
     sprintf(matrixname, "../data/m%s", argv[1]);
     sscanf(argv[1], "%d", &size);
 
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     double start = -MPI_Wtime();
 
-    //generate vector
-    vector *v = vector_gen(size);
-    vector_save(v, vectorname);
-    vector_delete(v);
+    if (!rank) {
+        //generate vector
+        vector *v = vector_gen(size);
+        vector_save(v, vectorname);
+        vector_delete(v);
+    }
 
     //generate matrix
-    matrix_gen_and_save(size, size, matrixname);
+    mpi_matrix_gen_and_save(size, size, matrixname);
     
-    printf("Time: %lld\n", start + MPI_Wtime());
+    if (!rank) {    
+        printf("Time: %lld\n", start + MPI_Wtime());
+    }
 
     MPI_Finalize();
     return 0;

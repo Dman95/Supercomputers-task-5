@@ -36,6 +36,7 @@ matrix *matrix_load_part(char *filename, long long which, long long from_how_muc
 MPI_File matrix_get_file_started_from_part(char *filename, long long which, long long from_how_much, long long *needed_to_read_row_count, long long *column_count);
 void matrix_save(matrix *m, char *filename);
 void matrix_gen_and_save(long long row_count, long long column_count, char *filename);
+void mpi_matrix_gen_and_save(long long row_count, long long column_count, char *filename);
 void matrix_print(matrix *m);
 void matrix_delete(matrix *m);
 

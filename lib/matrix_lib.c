@@ -198,6 +198,37 @@ void matrix_save(matrix *m, char *filename)
     MPI_File_close(&f);
 }
 
+void mpi_matrix_gen_and_save(long long row_count, long long column_count, char *filename)
+{
+    int myrank, size;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+   
+    long long needed_to_generate_row_count = count_part(myrank, size, row_count); 
+
+    MPI_File f;
+    MPI_Status s;
+    MPI_File_open(MPI_COMM_WORLD, filename, MPI_MODE_WRONLY | MPI_MODE_CREATE, MPI_INFO_NULL, &f);
+    
+    if (!myrank) {
+        MPI_File_write(f, &row_count, 1, MPI_LONG_LONG, &s);
+        MPI_File_write(f, &column_count, 1, MPI_LONG_LONG, &s);
+    }
+
+    long long row_size_in_bytes = sizeof(long long) + column_count * sizeof(double);
+    long long my_row_offset = (row_count / size) * myrank;
+    MPI_File_seek(f, 2 * sizeof(long long) + row_size_in_bytes * my_row_offset, MPI_SEEK_SET);
+
+    //save rows
+    for (long long i = 0; i < needed_to_generate_row_count; ++i) {
+        vector *v = vector_gen(column_count);
+        vector_save_fp(v, &f);
+        vector_delete(v);
+    }
+    
+    MPI_File_close(&f);
+}
+
 void matrix_gen_and_save(long long row_count, long long column_count, char *filename)
 {
     MPI_File f;
