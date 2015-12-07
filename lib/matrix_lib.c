@@ -172,7 +172,7 @@ MPI_File matrix_get_file_started_from_part(char *filename, long long which, long
 
     //seek to our part of data
     *needed_to_read_row_count = count_part(which, from_how_much, row_count);
-    long long one_part_size_in_rows = row_count / from_how_much;
+    long long one_part_size_in_rows = (row_count + from_how_much - 1) / from_how_much;
     long long row_size_in_bytes = sizeof(long long) + sizeof(double) * (*column_count);
     MPI_File_seek(f, row_size_in_bytes * one_part_size_in_rows * which, MPI_SEEK_CUR); 
 
