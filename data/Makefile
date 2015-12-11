@@ -1,6 +1,6 @@
 program: view_matrix
 view_matrix: view_matrix.o ../lib/matrix_lib.o
-	mpicc view_matrix.o ../lib/matrix_lib.o -o view_matrix
+	mpicc view_matrix.o ../lib/matrix_lib.o -lm -o view_matrix
 view_matrix.o: view_matrix.c
 	mpicc view_matrix.c -c --std=c99 -o view_matrix.o
 view_matrix.c: ../lib/matrix_lib.h

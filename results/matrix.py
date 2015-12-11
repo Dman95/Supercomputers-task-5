@@ -52,3 +52,11 @@ def multiply(m1, m2):
         for j in range(len(m2)):
             result[i][j] = dot(m1[i], m2[j])
     return result 
+
+def matrix_cmp(m1, m2):
+    eps = 0.000001
+    for i in range(len(m1)):
+        for j in range(len(m1[0])):
+            if abs(m1[i][j] - m2[i][j]) > eps:
+                return False
+    return True

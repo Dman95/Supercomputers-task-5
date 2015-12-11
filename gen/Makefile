@@ -1,6 +1,6 @@
 program: generate
 generate: generate.o ../lib/matrix_lib.o
-	mpicc generate.o ../lib/matrix_lib.o -o generate
+	mpicc generate.o ../lib/matrix_lib.o -lm -o generate
 generate.o: generate.c
 	mpicc generate.c -c --std=c99 -o generate.o
 generate.c: ../lib/matrix_lib.h

@@ -16,4 +16,4 @@ while i <= to:
     except:
         time = 0
     print('%d %f' % (i, time))
-    i *= 2
+    i *= 4

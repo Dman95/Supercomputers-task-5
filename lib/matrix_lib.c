@@ -3,6 +3,7 @@
 #include <time.h>
 #include "mpi.h"
 #include "matrix_lib.h"
+#include <math.h>
 
 //vector operations
 vector *vector_new(long long size)
@@ -11,6 +12,16 @@ vector *vector_new(long long size)
     v->size = size;
     if (size) {
         v->values = calloc(size, sizeof(double));
+    }
+    return v;
+}
+
+vector *vector_new_with_memory(long long size, void *memory)
+{
+    vector *v = calloc(1, sizeof(vector));
+    v->size = size;
+    if (size) {
+        v->values = memory;
     }
     return v;
 }
@@ -49,6 +60,44 @@ vector *vector_load_fp(MPI_File *f)
     MPI_File_read(*f, v->values, size, MPI_DOUBLE, &s);
 
     return v;
+}
+
+vector *vector_load_part_fp_with_memory(MPI_File *f, long long which, long long from_how_much, void *memory)
+{
+    MPI_Status s;
+
+    //load size
+    long long size;
+    MPI_File_read(*f, &size, 1, MPI_LONG_LONG, &s);
+
+    long long our_part_size = count_part(which, from_how_much, size);
+    long long one_part_size = (size + from_how_much - 1) / from_how_much;
+    long long omit_size = one_part_size * which;
+    long long left_size = size - omit_size - our_part_size;
+    MPI_File_seek(*f, omit_size * sizeof(double), MPI_SEEK_CUR);
+    
+    //load values
+    vector *v = vector_new_with_memory(our_part_size, memory);
+    MPI_File_read(*f, v->values, our_part_size, MPI_DOUBLE, &s);
+
+    MPI_File_seek(*f, left_size * sizeof(double), MPI_SEEK_CUR);
+    return v;
+}
+
+void vector_save_part_fp(vector *v, MPI_File *f, long long which, long long from_how_much, long long size)
+{
+    MPI_Status s;
+
+    long long one_part_size = (size + from_how_much - 1) / from_how_much;
+    long long omit_size = one_part_size * which;
+    long long left_size = size - omit_size - v->size;
+    MPI_File_seek(*f, sizeof(long long) + omit_size * sizeof(double), MPI_SEEK_CUR);
+    
+    //save values
+    MPI_File_write_all(*f, v->values, v->size, MPI_DOUBLE, &s);
+    //vector_print(v);
+
+    MPI_File_seek(*f, left_size * sizeof(double), MPI_SEEK_CUR);
 }
 
 void vector_save(vector *v, char *filename)
@@ -196,6 +245,53 @@ matrix *matrix_load_part(char *filename, long long which, long long from_how_muc
     return m;
 }
 
+matrix *matrix_load_block_with_memory(char *filename, long long i_index, long long j_index, long long i_dim_n_cuts, long long j_dim_n_cuts, void *memory)
+{
+    long long needed_to_read_row_count, column_count;
+    MPI_File f = matrix_get_file_started_from_part(filename, i_index, i_dim_n_cuts, &needed_to_read_row_count, &column_count);    
+
+    column_count = count_part(j_index, j_dim_n_cuts, column_count);
+
+    //read data
+    matrix *m = matrix_new_without_vector_init(needed_to_read_row_count, column_count);
+    for (long long i = 0; i < needed_to_read_row_count; ++i) {
+        vector *row = vector_load_part_fp_with_memory(&f, j_index, j_dim_n_cuts, memory);
+        m->rows[i] = row;
+        memory = ((double *) memory) + row->size;
+    }
+
+    MPI_File_close(&f);
+    return m;
+}
+
+void matrix_save_block(matrix *block, char *filename, long long i_index, long long j_index, long long row_count, long long column_count)
+{
+    if (j_index == 0 && i_index == 0) {
+        MPI_File f;
+        MPI_Status s;
+        MPI_File_open(MPI_COMM_SELF, filename, MPI_MODE_CREATE | MPI_MODE_WRONLY, MPI_INFO_NULL, &f);
+        MPI_File_write(f, &row_count, 1, MPI_LONG_LONG, &s);
+        MPI_File_write(f, &column_count, 1, MPI_LONG_LONG, &s);
+       
+        long long one_row_values_size_in_bytes = column_count * sizeof(double);
+        for (long long i = 0; i < row_count; ++i) {
+            MPI_File_write(f, &column_count, 1, MPI_LONG_LONG, &s);
+            MPI_File_seek(f, one_row_values_size_in_bytes, MPI_SEEK_CUR);
+        }
+        MPI_File_close(&f);
+    }
+
+    long long one_row_size_in_bytes = sizeof(long long) + column_count * sizeof(double);
+    long long omit_row_count = block->row_count * i_index;
+    long long offset = 2 * sizeof(long long) + omit_row_count * one_row_size_in_bytes;
+    MPI_File f = get_file_with_offset_for_write(filename, offset);
+    for (long long i = 0; i < block->row_count; ++i) {
+        vector_save_part_fp(block->rows[i], &f, j_index, column_count / block->column_count, column_count);
+    }
+    
+    MPI_File_close(&f);
+}
+
 void matrix_save(matrix *m, char *filename)
 {
     MPI_File f;
@@ -290,6 +386,17 @@ void matrix_delete(matrix *m)
     }
     free(m->rows);
     free(m);
+}
+
+void matrix_delete_with_memory(matrix *m, void *memory)
+{
+    for (long long i = 0; i <- m->row_count; ++i) {
+        m->rows[i]->values = NULL;
+        vector_delete(m->rows[i]); 
+    }
+    free(m->rows);
+    free(m);
+    free(memory);
 }
 
 //multiplication functions
@@ -456,4 +563,125 @@ MPI_File get_file_with_offset_for_write(char *filename, long long offset)
     MPI_File_seek(f, offset, MPI_SEEK_SET); 
 
     return f;
+}
+
+void sleep(int sec)
+{
+    double start = -MPI_Wtime();
+    while (start + MPI_Wtime() < sec);
+}
+
+//C = C + A * B
+void multiply_matrix_with_addition(matrix *A, matrix *B, matrix *C)
+{
+    for (long long i = 0; i < A->row_count; ++i) {
+        for (long long j = 0; j < B->column_count; ++j) {
+            for (long long k = 0; k < A->column_count; ++k) {
+                C->rows[i]->values[j] += A->rows[i]->values[k] * B->rows[k]->values[j];
+            }
+        }
+    }
+}
+
+void profile(int rank, double start, char *msg)
+{
+    if (!rank)
+        printf("%s %f\n", msg, start + MPI_Wtime());
+}
+
+void mpi_cannon_multiply_and_save_matrix(char *A_matrixname, char *B_matrixname, char *resultname)
+{
+    //double start = -MPI_Wtime();
+    //int r = 0;
+    //MPI_Comm_rank(MPI_COMM_WORLD, &r);
+
+    //profile(r, start, "init");
+    
+    long long A_row_count, A_column_count, B_row_count, B_column_count;
+    matrix_get_size(A_matrixname, &A_row_count, &A_column_count);
+    matrix_get_size(B_matrixname, &B_row_count, &B_column_count);
+
+    if (A_column_count != B_row_count) {
+        printf("Inconsistent column and row counts!\n");
+        exit(0);
+    }
+
+    int size;
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    
+    //create cart communicator
+    int dims[2];
+    double floorsqrtpart = 0;
+    if (modf(sqrt(size), &floorsqrtpart)) { //should be integer
+        printf("Wrong processor count - non integer square root!\n");
+        exit(0);
+    }
+    int intsqrtpart = floorsqrtpart;
+    if (A_row_count % intsqrtpart != 0 || A_column_count % intsqrtpart != 0 || 
+        B_column_count % intsqrtpart != 0 || B_row_count %intsqrtpart != 0) {
+        printf("Wrong processor count - different size blocks!\n");
+        exit(0);
+    }
+    dims[0] = dims[1] = intsqrtpart; //should be integer
+    int periods[2];
+    periods[0] = periods[1] = 1;
+    MPI_Comm comm_2d;
+    MPI_Cart_create(MPI_COMM_WORLD, 2, dims, periods, 1, &comm_2d);
+    
+    int my2drank;
+    MPI_Comm_rank(comm_2d, &my2drank);
+
+    int mycoords[2];
+    MPI_Cart_coords(comm_2d, my2drank, 2, mycoords);
+    
+    int rightrank, leftrank, downrank, uprank;
+    MPI_Cart_shift(comm_2d, 1, -1, &leftrank, &rightrank);
+    MPI_Cart_shift(comm_2d, 0, -1, &uprank, &downrank);
+
+    //profile(r, start, "cart");
+
+    long long A_part_row_count = count_part(mycoords[0], dims[0], A_row_count);
+    long long A_part_column_count = count_part(mycoords[1], dims[1], A_column_count);
+    long long B_part_row_count = count_part(mycoords[0], dims[0], B_row_count);
+    long long B_part_column_count = count_part(mycoords[1], dims[1], B_column_count);
+    long long A_part_size = A_part_row_count * A_part_column_count;
+    void *A_memory = calloc(A_part_size, sizeof(double));
+    long long B_part_size = B_part_row_count * B_part_column_count;
+    void *B_memory = calloc(B_part_size, sizeof(double));
+    matrix *A_part = matrix_load_block_with_memory(A_matrixname, mycoords[0], mycoords[1], dims[0], dims[1], A_memory);
+    matrix *B_part = matrix_load_block_with_memory(B_matrixname, mycoords[0], mycoords[1], dims[0], dims[1], B_memory);
+
+    int srcrank, dstrank;
+    MPI_Status s;
+    
+    //Initial placement
+    MPI_Cart_shift(comm_2d, 1, -mycoords[0], &srcrank, &dstrank);
+    MPI_Sendrecv_replace(A_memory, A_part_size, MPI_DOUBLE, dstrank, 0, srcrank, 0, comm_2d, &s);
+
+    MPI_Cart_shift(comm_2d, 0, -mycoords[1], &srcrank, &dstrank);
+    MPI_Sendrecv_replace(B_memory, B_part_size, MPI_DOUBLE, dstrank, 0, srcrank, 0, comm_2d, &s);
+    
+    //profile(r, start, "init");
+
+    //Computation
+    matrix *C_part = matrix_new(A_part_row_count, B_part_column_count);
+    for (int i = 0; i < dims[0]; ++i) {
+        multiply_matrix_with_addition(A_part, B_part, C_part);
+        //profile(r, start, "addition");
+        //shift matrix A left by one
+        MPI_Sendrecv_replace(A_memory, A_part_size, MPI_DOUBLE, leftrank, 0, rightrank, 0, comm_2d, &s);
+        //shift matrix B up by one
+        MPI_Sendrecv_replace(B_memory, B_part_size, MPI_DOUBLE, uprank, 0, downrank, 0, comm_2d, &s);
+        //profile(r, start, "send");
+    }
+
+    matrix_save_block(C_part, resultname, mycoords[0], mycoords[1], A_row_count, B_column_count);
+    
+    //profile(r, start, "save");
+
+    matrix_delete_with_memory(A_part, A_memory);
+    matrix_delete_with_memory(B_part, B_memory);
+    matrix_delete(C_part);
+
+    //profile(r, start, "delete");
 }
