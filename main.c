@@ -125,14 +125,18 @@ int main(int argc, char **argv)
         MPI_File_write(f, &column_count, 1, MPI_LONG_LONG, &s);
         MPI_File_write(f, &column_count, 1, MPI_LONG_LONG, &s);
         MPI_File_close(&f);
-    } 
-    MPI_File resultfile = get_file_with_offset_for_write(resultname, 2 * sizeof(long long) + 
-            count_part(0, size, row_count) * myrank * (sizeof(long long) + column_count * sizeof(double)));
-    for (long long i = 0; i < u->row_count - ((myrank != size - 1) ? 1 : 0); ++i) {
+    }
+    long long offset = 2 * sizeof(long long);
+    if (myrank == 0) {
+        offset += 0;
+    } else {
+        offset += (1 + (row_count - 2) * myrank) * (sizeof(long long) + column_count * sizeof(double));
+    }
+    MPI_File resultfile = get_file_with_offset_for_write(resultname, offset);
+    for (long long i = ((myrank != 0) ? 1 : 0); i < u->row_count - ((myrank != size - 1) ? 1 : 0); ++i) {
         vector_save_fp(u->rows[i], &resultfile);
     }
     MPI_File_close(&resultfile);
-
 
     matrix_delete(u);
     matrix_delete(us);
