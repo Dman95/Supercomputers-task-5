@@ -120,7 +120,7 @@ void vector_save_fp(vector *v, MPI_File *f)
     MPI_File_write(*f, &v->size, 1, MPI_LONG_LONG, &s);
 
     //save values
-    MPI_File_write_all(*f, v->values, v->size, MPI_DOUBLE, &s);
+    MPI_File_write(*f, v->values, v->size, MPI_DOUBLE, &s);
 }
 
 void vector_print(vector *v)
