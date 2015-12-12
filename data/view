@@ -1,3 +1,0 @@
-#!/bin/bash
-make
-mpisubmit.bg -n 1 --stdout out.txt view_matrix -- "$@"
