@@ -34,15 +34,15 @@ int main(int argc, char **argv)
     //read cl parameters
     long long m;
     double precision;
-    if (argc < 3) {
-        precision = 0.01;
-        if (argc < 2) {
-            m = 512;
-        } else {
-            sscanf(argv[1], "%lld", &m);
-        }
-    } else {
+    if (argc >= 3) {
         sscanf(argv[2], "%lf", &precision);
+    } else {
+        precision = 0.01;
+    }
+    if (argc >= 2) {
+        sscanf(argv[1], "%lld", &m);
+    } else {
+        m = 512;
     }
 
     int myrank, size;
@@ -70,7 +70,7 @@ int main(int argc, char **argv)
     //count
     double radius = count_radius(m);
     double w = 0;
-    for (long long n = 0; n < 10; ++n) {
+    for (long long n = 0; ; ++n) {
         for (long long i = 1; i < us->row_count - 1; ++i) {
             for (long long j = 1; j < us->column_count - 1; ++j) {
                 us->rows[i]->values[j] = (u->rows[i - 1]->values[j] + u->rows[i + 1]->values[j] +
@@ -78,10 +78,23 @@ int main(int argc, char **argv)
             }
         }
         w = count_w(n, w, radius);
+        double curmaxdiff = 0;
         for (long long i = 1; i < us->row_count - 1; ++i) {
             for (long long j = 1; j < us->column_count - 1; ++j) {
+                double prev = u->rows[i]->values[j];
                 u->rows[i]->values[j] = w * us->rows[i]->values[j] + (1 - w) * u->rows[i]->values[j];
+                double diff = fabs(prev - u->rows[i]->values[j]);
+                if (diff > curmaxdiff) {
+                    curmaxdiff = diff;
+                }
             }
+        }
+        double allmaxdiff = 0;
+        MPI_Allreduce(&curmaxdiff, &allmaxdiff, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+
+        if (allmaxdiff <= precision) {
+            printf("N: %lld maxdiff: %f pr: %f\n", n, allmaxdiff, precision);
+            break;
         }
         
         //exchanges
@@ -100,6 +113,9 @@ int main(int argc, char **argv)
         
         }
     }
+
+    matrix_delete(u);
+    matrix_delete(us);
     
     double time_elapsed = start + MPI_Wtime();
     printf("Time: %f\n", time_elapsed);
