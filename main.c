@@ -17,14 +17,13 @@ double count_radius(long long m)
 
 double count_w(long long n, double prev_w, double radius)
 {
-    return 1;
     if (n == 0) {
         return 0;
     }
     if (n == 1) {
-        return 1 / (1 - radius * radius / 2);
+        return 1.0 / (1 - radius * radius / 2) / 2.0;
     }
-    return 1 / (1 - radius * radius * prev_w / 4);
+    return 1.0 / (1 - radius * radius * prev_w / 4) / 2.0;
 }
 
 int main(int argc, char **argv)
@@ -111,7 +110,6 @@ int main(int argc, char **argv)
             MPI_Sendrecv(u->rows[u->row_count - 2]->values, u->rows[u->row_count - 2]->size, MPI_DOUBLE, myrank + 1, n,
                          u->rows[u->row_count - 1]->values, u->rows[u->row_count - 1]->size, MPI_DOUBLE, myrank + 1, n, 
                          MPI_COMM_WORLD, &s);
-        
         }
     }
 
@@ -129,7 +127,7 @@ int main(int argc, char **argv)
     } 
     MPI_File resultfile = get_file_with_offset_for_write(resultname, 2 * sizeof(long long) + 
             count_part(0, size, row_count) * myrank * (sizeof(long long) + column_count * sizeof(double)));
-    for (long long i = 0; i < u->row_count - ((myrank == size - 1) ? 1 : 0); ++i) {
+    for (long long i = 0; i < u->row_count - ((myrank != size - 1) ? 1 : 0); ++i) {
         vector_save_fp(u->rows[i], &resultfile);
     }
     MPI_File_close(&resultfile);
