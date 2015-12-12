@@ -89,7 +89,7 @@ int main(int argc, char **argv)
         }
         double allsum = 0;
         MPI_Allreduce(&cursum, &allsum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-        allsum = cursum / m;
+        allsum /= m;
 
         if (n % 100 == 0) {
             printf("N: %lld maxsum: %f pr: %f\n", n, allsum, precision);
