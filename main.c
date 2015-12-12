@@ -78,22 +78,23 @@ int main(int argc, char **argv)
             }
         }
         w = count_w(n, w, radius);
-        double curmaxdiff = 0;
+        double cursum = 0;
         for (long long i = 1; i < us->row_count - 1; ++i) {
             for (long long j = 1; j < us->column_count - 1; ++j) {
                 double prev = u->rows[i]->values[j];
                 u->rows[i]->values[j] = w * us->rows[i]->values[j] + (1 - w) * u->rows[i]->values[j];
                 double diff = fabs(prev - u->rows[i]->values[j]);
-                if (diff > curmaxdiff) {
-                    curmaxdiff = diff;
-                }
+                cursum += diff;
             }
         }
-        double allmaxdiff = 0;
-        MPI_Allreduce(&curmaxdiff, &allmaxdiff, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
+        double allsum = 0;
+        MPI_Allreduce(&cursum, &allsum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+        allsum = cursum / m;
 
-        printf("N: %lld maxdiff: %f pr: %f\n", n, allmaxdiff, precision);
-        if (allmaxdiff <= precision) {
+        if (n % 100 == 0) {
+            printf("N: %lld maxsum: %f pr: %f\n", n, allsum, precision);
+        }
+        if (allsum <= precision) {
             break;
         }
         
