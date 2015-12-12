@@ -9,6 +9,7 @@ try:
     while True:
         f = os.popen('llq -W')
         s = f.read()
+        s = '\n'.join(s.split('\n')[:10]) + '\n'
         print s,
         f.close()
         time.sleep(1)

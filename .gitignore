@@ -5,3 +5,4 @@ main
 *.err
 core*
 *.pyc
+result

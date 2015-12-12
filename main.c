@@ -17,6 +17,7 @@ double count_radius(long long m)
 
 double count_w(long long n, double prev_w, double radius)
 {
+    return 1;
     if (n == 0) {
         return 0;
     }
@@ -70,7 +71,7 @@ int main(int argc, char **argv)
     //count
     double radius = count_radius(m);
     double w = 0;
-    for (long long n = 0; ; ++n) {
+    for (long long n = 1; ; ++n) {
         for (long long i = 1; i < us->row_count - 1; ++i) {
             for (long long j = 1; j < us->column_count - 1; ++j) {
                 us->rows[i]->values[j] = (u->rows[i - 1]->values[j] + u->rows[i + 1]->values[j] +
@@ -92,8 +93,8 @@ int main(int argc, char **argv)
         double allmaxdiff = 0;
         MPI_Allreduce(&curmaxdiff, &allmaxdiff, 1, MPI_DOUBLE, MPI_MAX, MPI_COMM_WORLD);
 
+        printf("N: %lld maxdiff: %f pr: %f\n", n, allmaxdiff, precision);
         if (allmaxdiff <= precision) {
-            printf("N: %lld maxdiff: %f pr: %f\n", n, allmaxdiff, precision);
             break;
         }
         
@@ -113,6 +114,26 @@ int main(int argc, char **argv)
         
         }
     }
+
+    char *resultname = "result";
+    row_count += 2;
+    column_count += 2;
+    if (!myrank) {
+        //write size
+        MPI_File f;
+        MPI_Status s;
+        MPI_File_open(MPI_COMM_SELF, resultname, MPI_MODE_WRONLY | MPI_MODE_CREATE, MPI_INFO_NULL, &f);
+        MPI_File_write(f, &column_count, 1, MPI_LONG_LONG, &s);
+        MPI_File_write(f, &column_count, 1, MPI_LONG_LONG, &s);
+        MPI_File_close(&f);
+    } 
+    MPI_File resultfile = get_file_with_offset_for_write(resultname, 2 * sizeof(long long) + 
+            count_part(0, size, row_count) * myrank * (sizeof(long long) + column_count * sizeof(double)));
+    for (long long i = 0; i < u->row_count - ((myrank == size - 1) ? 1 : 0); ++i) {
+        vector_save_fp(u->rows[i], &resultfile);
+    }
+    MPI_File_close(&resultfile);
+
 
     matrix_delete(u);
     matrix_delete(us);
