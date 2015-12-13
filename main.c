@@ -63,7 +63,7 @@ int main(int argc, char **argv)
     }
     if (myrank == size - 1) {
         for (long long j = 0; j < column_count + 2; ++j) {
-            u->rows[row_count - 1]->values[j] = us->rows[row_count - 1]->values[j] = sin(M_PI * dx * j) * exp(-dx * j);
+            u->rows[u->row_count - 1]->values[j] = us->rows[us->row_count - 1]->values[j] = sin(M_PI * dx * j) * exp(-dx * j);
         }
     }
     
@@ -89,7 +89,6 @@ int main(int argc, char **argv)
         }
         double allsum = 0;
         MPI_Allreduce(&cursum, &allsum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
-        allsum /= m;
 
         if (n % 100 == 0) {
             printf("N: %lld maxsum: %f pr: %f\n", n, allsum, precision);
