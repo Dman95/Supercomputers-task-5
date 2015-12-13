@@ -21,9 +21,9 @@ double count_w(long long n, double prev_w, double radius)
         return 0;
     }
     if (n == 1) {
-        return 1.0 / (1 - radius * radius / 2) / 2.0;
+        return 1.0 / (1 - radius * radius / 2);
     }
-    return 1.0 / (1 - radius * radius * prev_w / 4) / 2.0;
+    return 1.0 / (1 - radius * radius * prev_w / 4);
 }
 
 int main(int argc, char **argv)
@@ -82,8 +82,13 @@ int main(int argc, char **argv)
         for (long long i = 1; i < us->row_count - 1; ++i) {
             for (long long j = 1; j < us->column_count - 1; ++j) {
                 double prev = u->rows[i]->values[j];
-                u->rows[i]->values[j] = w * us->rows[i]->values[j] + (1 - w) * u->rows[i]->values[j];
-                double diff = fabs(prev - u->rows[i]->values[j]);
+                double newval = w * us->rows[i]->values[j] + (1 - w) * u->rows[i]->values[j];
+                if (newval > prev) {
+                    u->rows[i]->values[j] = newval;
+                } else {
+                    newval = prev;
+                } 
+                double diff = newval - prev;
                 cursum += diff;
             }
         }
