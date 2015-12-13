@@ -1,0 +1,14 @@
+#!/bin/bash
+./clean
+
+rm out$2_$3_$1_map.txt
+
+if [ $1 -gt 128 ];
+then
+    t=00:03:00
+else
+    t=00:15:00
+fi
+
+make && mpisubmit.bg -n $1 --wtime $t -m smp -e \"OMP_NUM_THREADS=4 BG_MAPPING=mapping.map \" --stdout out$2_$3_$1_map.txt main -- $2 $3 && ./see.py out$2_$3_$1_map.txt 
+ 

@@ -74,30 +74,31 @@ int main(int argc, char **argv)
     double w = 0;
     for (long long n = 1; ; ++n) {
         #pragma omp parallel for
-        for (long long i = 1; i < us->row_count - 1; ++i) {
-            for (long long j = 1; j < us->column_count - 1; ++j) {
-                us->rows[i]->values[j] = (u->rows[i - 1]->values[j] + u->rows[i + 1]->values[j] +
-                                         u->rows[i]->values[j - 1] + u->rows[i]->values[j + 1]) / 4;
-            }
+        for (long long ij = 0; ij < (us->row_count - 2) * (us->column_count - 2); ++ij) {
+            long long i = 1 + ij / (us->column_count - 2);
+            long long j = 1 + ij % (us->column_count - 2);
+            us->rows[i]->values[j] = (u->rows[i - 1]->values[j] + u->rows[i + 1]->values[j] +
+                                      u->rows[i]->values[j - 1] + u->rows[i]->values[j + 1]) / 4;
         }
         w = count_w(n, w, radius);
         double cursum = 0;
         #pragma omp parallel for reduction( + : cursum )
-        for (long long i = 1; i < us->row_count - 1; ++i) {
-            for (long long j = 1; j < us->column_count - 1; ++j) {
-                double prev = u->rows[i]->values[j];
-                double newval = w * us->rows[i]->values[j] + (1 - w) * u->rows[i]->values[j];
-                if (newval > prev) {
-                    u->rows[i]->values[j] = newval;
-                } else {
-                    newval = prev;
-                } 
-                double diff = newval - prev;
-                cursum += diff;
-            }
+        for (long long ij = 0; ij < (us->row_count - 2) * (us->column_count - 2); ++ij) {
+            long long i = 1 + ij / (us->column_count - 2);
+            long long j = 1 + ij % (us->column_count - 2);
+            double prev = u->rows[i]->values[j];
+            double newval = w * us->rows[i]->values[j] + (1 - w) * u->rows[i]->values[j];
+            if (newval > prev) {
+                u->rows[i]->values[j] = newval;
+            } else {
+                newval = prev;
+            } 
+            double diff = newval - prev;
+            cursum += diff * diff;
         }
         double allsum = 0;
         MPI_Allreduce(&cursum, &allsum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+        allsum = sqrt(allsum);
 
         if (!myrank && n % 1000 == 0) {
             printf("N: %lld maxsum: %f pr: %f\n", n, allsum, precision);
