@@ -18,7 +18,7 @@ double count_radius(long long m)
 double count_w(long long n, double prev_w, double radius)
 {
     if (n == 0) {
-        return 1;
+        return 0;
     }
     if (n == 1) {
         return 1.0 / (1 - radius * radius / 2);
@@ -72,7 +72,7 @@ int main(int argc, char **argv)
     //count
     double radius = count_radius(m);
     double w = 0;
-    for (long long n = 0; ; ++n) {
+    for (long long n = 1; ; ++n) {
         #pragma omp parallel for
         for (long long i = 1; i < us->row_count - 1; ++i) {
             for (long long j = 1; j < us->column_count - 1; ++j) {
