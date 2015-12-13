@@ -18,7 +18,7 @@ double count_radius(long long m)
 double count_w(long long n, double prev_w, double radius)
 {
     if (n == 0) {
-        return 0;
+        return 1;
     }
     if (n == 1) {
         return 1.0 / (1 - radius * radius / 2);
@@ -57,11 +57,13 @@ int main(int argc, char **argv)
     double dx, dy;
     dx = dy = 1.0 / (m + 1);
     if (myrank == 0) {
+        #pragma omp parallel for
         for (long long j = 0; j < column_count + 2; ++j) {
             u->rows[0]->values[j] = us->rows[0]->values[j] = sin(M_PI * dx * j);
         }
     }
     if (myrank == size - 1) {
+        #pragma omp parallel for
         for (long long j = 0; j < column_count + 2; ++j) {
             u->rows[u->row_count - 1]->values[j] = us->rows[us->row_count - 1]->values[j] = sin(M_PI * dx * j) * exp(-dx * j);
         }
@@ -70,7 +72,8 @@ int main(int argc, char **argv)
     //count
     double radius = count_radius(m);
     double w = 0;
-    for (long long n = 1; ; ++n) {
+    for (long long n = 0; ; ++n) {
+        #pragma omp parallel for
         for (long long i = 1; i < us->row_count - 1; ++i) {
             for (long long j = 1; j < us->column_count - 1; ++j) {
                 us->rows[i]->values[j] = (u->rows[i - 1]->values[j] + u->rows[i + 1]->values[j] +
@@ -79,6 +82,7 @@ int main(int argc, char **argv)
         }
         w = count_w(n, w, radius);
         double cursum = 0;
+        #pragma omp parallel for reduction( + : cursum )
         for (long long i = 1; i < us->row_count - 1; ++i) {
             for (long long j = 1; j < us->column_count - 1; ++j) {
                 double prev = u->rows[i]->values[j];
@@ -95,7 +99,7 @@ int main(int argc, char **argv)
         double allsum = 0;
         MPI_Allreduce(&cursum, &allsum, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
 
-        if (n % 100 == 0) {
+        if (!myrank && n % 1000 == 0) {
             printf("N: %lld maxsum: %f pr: %f\n", n, allsum, precision);
         }
         if (allsum <= precision) {
@@ -116,7 +120,7 @@ int main(int argc, char **argv)
                          u->rows[u->row_count - 1]->values, u->rows[u->row_count - 1]->size, MPI_DOUBLE, myrank + 1, n, 
                          MPI_COMM_WORLD, &s);
         }
-    }
+    } 
 
     char *resultname = "result";
     row_count += 2;
