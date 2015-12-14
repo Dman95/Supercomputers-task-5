@@ -27,6 +27,6 @@ def load_matrix(filename):
 
 A = load_matrix('result')
 
-plt.imshow(A)
+plt.imshow(A, origin='lower')
 plt.grid(True)
 plt.show()
