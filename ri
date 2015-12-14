@@ -10,5 +10,5 @@ else
     t=00:15:00
 fi
 
-make && mpisubmit.bg -n $1 --wtime $t -m smp -e \"OMP_NUM_THREADS=4\" --stdout out$2_$3_$1.txt main -- $2 $3 && ./see.py out$2_$3_$1.txt 
+make && mpisubmit.bg -n $1 --wtime $t -m smp -e \"OMP_NUM_THREADS=4\" --stdout out$2_$3_$1.txt main -- $2 $3 result$2_$2_$1 && ./see.py out$2_$3_$1.txt 
  

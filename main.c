@@ -123,7 +123,7 @@ int main(int argc, char **argv)
         }
     } 
 
-    char *resultname = "result";
+    char *resultname = argv[3];
     row_count += 2;
     column_count += 2;
     if (!myrank) {
