@@ -13,7 +13,11 @@ while i <= to:
         f = open(filetemplate % (i), 'r')
         time = max([float(s.split()[1]) for s in f.read().split('\n') if s != '' and s.startswith('Time')])
         f.close()
+        f = open(filetemplate % (i), 'r')
+        n_iter = max([float(s.split()[1]) for s in f.read().split('\n') if s != '' and s.startswith('N')])
+        f.close()
     except:
         time = 0
-    print('%d %f' % (i, time))
+        n_iter = 0
+    print('%d %f %d' % (i, time, n_iter))
     i *= 2
